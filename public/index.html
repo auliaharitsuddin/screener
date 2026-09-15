@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="id" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screener</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0F172A; --surface:#141C2E; --muted:#272F42; --border:#334155;
+  --fg:#F8FAFC; --fg-dim:#94A3B8;
+  --primary:#F59E0B; --on-primary:#0F172A;
+  --up:#34D399; --down:#F87171;
+  --r:6px;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:13px; line-height:1.5;
+}
+.wrap{max-width:1400px; margin:0 auto; padding:var(--s5) var(--s4) var(--s6)}
+
+header{display:flex; align-items:baseline; gap:var(--s3); flex-wrap:wrap; margin-bottom:var(--s5)}
+h1{font-size:20px; font-weight:700; letter-spacing:-.02em; margin:0}
+header p{margin:0; color:var(--fg-dim); font-size:12px}
+
+form{display:flex; gap:var(--s2); flex-wrap:wrap}
+label{display:block; font-size:11px; color:var(--fg-dim); margin-bottom:var(--s1)}
+.field{flex:1 1 420px; min-width:0}
+input[type=text]{
+  width:100%; min-height:44px; padding:0 var(--s3);
+  background:var(--surface); color:var(--fg);
+  border:1px solid var(--border); border-radius:var(--r);
+  font:inherit;
+}
+input::placeholder{color:#64748B}
+input:focus-visible,button:focus-visible{outline:2px solid var(--primary); outline-offset:2px}
+button{
+  min-height:44px; padding:0 var(--s5); align-self:flex-end;
+  background:var(--primary); color:var(--on-primary);
+  border:0; border-radius:var(--r); font:inherit; font-weight:700;
+  cursor:pointer; transition:background .15s ease, transform .15s ease;
+}
+button:hover:not(:disabled){background:#FBBF24}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.45; cursor:not-allowed}
+
+.engine{
+  display:inline-flex; align-items:center; gap:6px; margin-top:var(--s2);
+  font-size:11px; color:var(--fg-dim); cursor:pointer;
+}
+.engine[hidden]{display:none}
+.engine input{accent-color:var(--primary); width:14px; height:14px; margin:0}
+.chips{display:flex; gap:var(--s2); flex-wrap:wrap; margin-top:var(--s3)}
+.chip{
+  background:var(--muted); color:var(--fg-dim); border:1px solid var(--border);
+  border-radius:999px; padding:6px var(--s3); font-size:11px; cursor:pointer;
+  transition:color .15s ease, border-color .15s ease;
+}
+.chip:hover{color:var(--fg); border-color:var(--primary)}
+
+.status{min-height:18px; font-size:11px; color:var(--fg-dim)}
+.status b{color:var(--primary); font-weight:500}
+.err{color:var(--down)}
+
+/* Toolbar: baris pasar dan baris tab preset, meniru susunan TradingView. */
+.bar{
+  display:flex; align-items:center; gap:var(--s3);
+  flex-wrap:wrap; margin-top:var(--s4);
+}
+.bar.tabs{
+  justify-content:space-between;
+  border-bottom:1px solid var(--border); padding-bottom:var(--s2);
+}
+.seg{display:flex; gap:var(--s1); flex-wrap:wrap}
+.seg button{
+  min-height:32px; padding:0 var(--s3); align-self:auto;
+  background:transparent; color:var(--fg-dim);
+  border:1px solid transparent; border-radius:var(--r);
+  font:inherit; font-size:11px; font-weight:400; letter-spacing:.02em;
+  cursor:pointer; transition:background .15s ease, color .15s ease;
+}
+.seg button:hover{background:var(--muted); color:var(--fg)}
+.seg button[aria-pressed=true],
+.seg button[aria-selected=true]{
+  background:var(--muted); color:var(--fg); font-weight:500;
+  border-color:var(--border);
+}
+#markets button[aria-pressed=true]{border-color:var(--primary); color:var(--primary)}
+
+/* Filter pill: klik untuk buka dropdown preset, x untuk hapus. */
+.pills{display:flex; gap:var(--s2); flex-wrap:wrap; align-items:center}
+.pill{
+  display:inline-flex; align-items:center; gap:6px;
+  min-height:32px; padding:0 var(--s3);
+  background:var(--muted); color:var(--fg-dim);
+  border:1px solid var(--border); border-radius:var(--r);
+  font:inherit; font-size:11px; cursor:pointer;
+  transition:border-color .15s ease, color .15s ease;
+}
+.pill:hover{color:var(--fg); border-color:var(--fg-dim)}
+.pill.set{border-color:var(--primary); color:var(--primary)}
+.pill b{font-weight:500; color:var(--fg)}
+.pill .x{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:16px; height:16px; margin-right:-4px; border-radius:3px;
+  color:var(--fg-dim); font-size:13px; line-height:1;
+}
+.pill .x:hover{background:var(--border); color:var(--fg)}
+.pill.add{font-weight:700; padding:0 var(--s3)}
+.pill.clear{border-style:dashed}
+
+/* Popover untuk dropdown filter, menu kolom, dan column settings. */
+.pop{
+  position:absolute; z-index:100; min-width:250px; max-width:330px;
+  max-height:min(460px, 70vh); overflow-y:auto;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r); padding:var(--s2);
+  box-shadow:0 12px 32px rgb(0 0 0 / .45);
+}
+.pop h4{
+  margin:var(--s2) var(--s2) var(--s1);
+  font-size:10px; font-weight:500; color:var(--fg-dim);
+  text-transform:uppercase; letter-spacing:.08em;
+}
+.pop button{
+  display:block; width:100%; min-height:32px; padding:6px var(--s2);
+  align-self:auto; text-align:left;
+  background:transparent; color:var(--fg); border:0; border-radius:4px;
+  font:inherit; font-size:12px; font-weight:400; cursor:pointer;
+}
+.pop button:hover{background:var(--muted)}
+.pop button.sel{color:var(--primary)}
+.pop button small{display:block; color:var(--fg-dim); font-size:10px; margin-top:1px}
+.pop hr{border:0; border-top:1px solid var(--border); margin:var(--s2) 0}
+.pop .row{display:flex; gap:var(--s2); align-items:center; padding:var(--s2)}
+.pop .row select,.pop .row input{
+  flex:1; min-width:0; min-height:34px; padding:0 var(--s2);
+  background:var(--bg); color:var(--fg);
+  border:1px solid var(--border); border-radius:4px; font:inherit; font-size:12px;
+}
+.pop .act{display:flex; gap:var(--s2); padding:var(--s2); justify-content:flex-end}
+.pop .act button{
+  width:auto; min-height:34px; padding:0 var(--s4); text-align:center;
+  border:1px solid var(--border); font-size:11px;
+}
+.pop .act .primary{background:var(--primary); color:var(--on-primary); font-weight:700; border-color:var(--primary)}
+.pop .act .danger:hover{background:var(--down); color:var(--bg)}
+.pop input[type=search]{
+  width:calc(100% - var(--s2)); margin:var(--s1) var(--s1) var(--s2);
+  min-height:34px; padding:0 var(--s2);
+  background:var(--bg); color:var(--fg);
+  border:1px solid var(--border); border-radius:4px; font:inherit; font-size:12px;
+}
+
+/* Notifikasi indikator tidak tersedia. Ikon plus teks, bukan warna saja. */
+.note{
+  display:flex; gap:var(--s2); align-items:flex-start;
+  background:var(--surface); border:1px solid var(--border);
+  border-left:3px solid var(--primary); border-radius:var(--r);
+  padding:var(--s3); margin-top:var(--s4); font-size:12px;
+}
+.note svg{flex:none; width:15px; height:15px; margin-top:1px; stroke:var(--primary)}
+.note div{min-width:0}
+.note b{display:block; color:var(--fg); font-weight:500; margin-bottom:2px}
+.note p{margin:0; color:var(--fg-dim); line-height:1.6}
+.note code{
+  background:var(--muted); border-radius:3px; padding:1px 5px;
+  color:var(--fg); font-size:11px;
+}
+
+.scroll{overflow-x:auto; border-top:1px solid var(--border)}
+table{width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums}
+th,td{padding:var(--s2) var(--s3); text-align:right; white-space:nowrap; border-bottom:1px solid var(--muted)}
+th{
+  position:sticky; top:0; background:var(--bg); z-index:1;
+  font-size:10px; font-weight:500; color:var(--fg-dim);
+  text-transform:uppercase; letter-spacing:.06em;
+}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+th.on{color:var(--primary)}
+th.sortable{cursor:pointer; user-select:none; transition:color .15s ease}
+th.sortable:hover{color:var(--fg)}
+th .dir{color:var(--primary); margin-left:2px}
+th .cog{
+  width:11px; height:11px; margin-left:3px; vertical-align:-1px;
+  stroke:var(--fg-dim); opacity:0; transition:opacity .15s ease;
+}
+th.sortable:hover .cog{opacity:1}
+th.addcol{width:34px; padding:0}
+th.addcol button{
+  min-height:28px; width:28px; padding:0; align-self:auto;
+  background:transparent; color:var(--fg-dim); border:1px solid var(--border);
+  border-radius:4px; font:inherit; font-size:13px; font-weight:400; cursor:pointer;
+}
+th.addcol button:hover{color:var(--primary); border-color:var(--primary)}
+th:first-child,td:first-child{
+  position:sticky; left:0; background:var(--bg); z-index:2;
+}
+th:first-child{z-index:3}
+tbody tr:hover td:first-child{background:var(--surface)}
+tbody tr:hover{background:var(--surface)}
+.sym{font-weight:700}
+.nm{color:var(--fg-dim); font-size:11px; max-width:210px; overflow:hidden; text-overflow:ellipsis}
+.tag{
+  display:inline-block; padding:1px 6px; border-radius:3px; font-size:10px;
+  background:var(--muted); color:var(--fg-dim); border:1px solid var(--border);
+}
+.up{color:var(--up)} .down{color:var(--down)} .nil{color:#475569}
+
+.skel{height:14px; border-radius:3px; background:var(--muted); animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.45}50%{opacity:.9}}
+.empty{padding:var(--s6) var(--s4); text-align:center; color:var(--fg-dim)}
+.empty p{margin:0 0 var(--s2)}
+footer{margin-top:var(--s5); color:#64748B; font-size:11px}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+@media (max-width:640px){.nm{display:none} .wrap{padding:var(--s4) var(--s3)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Screener</h1>
+    <p>Saring saham IDX, saham US, dan kripto dengan kalimat biasa.</p>
+  </header>
+
+  <form id="f">
+    <div class="field">
+      <label for="q">Kriteria</label>
+      <input id="q" type="text" autocomplete="off"
+        placeholder="mis. saham indonesia yang oversold dan turun jauh dari puncaknya">
+    </div>
+    <button id="go" type="submit">Cari</button>
+  </form>
+  <label class="engine" id="engineWrap" hidden>
+    <input type="checkbox" id="engineLocal">
+    Terjemahkan tanpa LLM (aturan lokal)
+  </label>
+
+  <div class="chips" id="chips"></div>
+  <div id="notices" aria-live="polite"></div>
+
+  <div class="bar">
+    <div class="seg" id="markets" role="group" aria-label="Pilih pasar"></div>
+    <div class="pills" id="crit"></div>
+  </div>
+
+  <div class="bar tabs">
+    <div class="seg" id="presets" role="tablist" aria-label="Set indikator"></div>
+    <span class="status" id="status" aria-live="polite"></span>
+  </div>
+
+  <div class="scroll"><table>
+    <thead><tr id="th"></tr></thead>
+    <tbody id="tb"></tbody>
+  </table></div>
+
+  <div id="pop" class="pop" hidden></div>
+
+  <footer>Data: CoinGecko dan Yahoo Finance, cache 5 menit. Bukan saran investasi.</footer>
+</div>
+
+<script type="module">
+const $ = s => document.querySelector(s);
+const tb = $('#tb'), status = $('#status'), crit = $('#crit'), go = $('#go'), q = $('#q');
+const pop = $('#pop');
+
+const MARKETS = [
+  { id: 'US', label: 'Saham US' },
+  { id: 'IDX', label: 'Saham ID' },
+  { id: 'CRYPTO', label: 'Kripto' },
+];
+
+// Katalog indikator dari server. Diisi sekali saat halaman dibuka.
+let META = { indicators: [], groups: {}, timeframes: [], intraday: [], presets: [] };
+const byField = {};
+
+// State tampilan browse. Prompt mengambil alih sementara, lalu kembali ke sini
+// begitu user menyentuh toolbar lagi. Dibaca dari URL supaya tampilan bisa
+// dibagikan lewat link dan bertahan saat halaman di-refresh.
+const url = new URLSearchParams(location.search);
+const view = {
+  markets: (url.get('markets') ?? '').split(',').filter(m => MARKETS.some(x => x.id === m)),
+  preset: url.get('preset') || 'overview',
+  sort: url.get('sort') || null,
+  dir: url.get('dir') === 'asc' ? 'asc' : 'desc',
+  filters: url.getAll('f'),          // "field:op:value"
+  cols: (url.get('cols') ?? '').split(',').filter(Boolean),
+  hide: (url.get('hide') ?? '').split(',').filter(Boolean),
+};
+if (!view.markets.length) view.markets = ['US'];
+let mode = 'browse'; // 'browse' | 'prompt'
+
+const CONTOH = [
+  'saham indonesia PER di bawah 15 dengan ROE di atas 15',
+  'saham amerika dividen di atas 3% dan utang rendah',
+  'saham yang MACD bullish dan di atas MA200',
+  'kripto top market cap yang naik minggu ini',
+];
+$('#chips').innerHTML = CONTOH.map(c =>
+  `<button class="chip" type="button" data-q="${c}">${c}</button>`).join('');
+$('#chips').addEventListener('click', e => {
+  const b = e.target.closest('.chip');
+  if (b) { q.value = b.dataset.q; $('#f').requestSubmit(); }
+});
+
+const esc = s => String(s).replace(/[&<>"]/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const fmtNum = (v, cur) => {
+  if (typeof v !== 'number') return null;
+  // Maksimal 2 desimal untuk harga >= 1: dengan koma desimal Indonesia, "71,670"
+  // terbaca seperti 71 ribu padahal 71,67 dolar. Koin pecahan kecil tetap butuh
+  // presisi penuh, jadi hanya nilai di bawah 1 yang diberi 6 desimal.
+  const d = cur === 'IDR' ? 0 : (Math.abs(v) >= 1 ? 2 : 6);
+  return v.toLocaleString('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
+};
+
+// Suffix eksplisit, bukan notasi compact bawaan locale id-ID: locale itu memakai
+// "M" untuk miliar sementara "jt" untuk juta, jadi 21,2 miliar tampil "21,2 M"
+// dan mudah dibaca sebagai 21 juta.
+const UNITS = [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
+function compact(v) {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return null;
+  const abs = Math.abs(v);
+  for (const [size, suffix] of UNITS) {
+    if (abs >= size) {
+      const n = v / size;
+      return `${n.toFixed(Math.abs(n) >= 100 ? 0 : 1).replace('.', ',')}${suffix}`;
+    }
+  }
+  return v.toLocaleString('id-ID', { maximumFractionDigits: 0 });
+}
+
+// Nilai filter di pill: angka besar dipendekkan supaya pill tidak melebar.
+const fmtVal = (field, v) =>
+  byField[field]?.fmt === 'compact' && Math.abs(v) >= 1e6 ? compact(v)
+  : String(v).replace('.', ',');
+
+// --- Popover ------------------------------------------------------------
+let popAnchor = null;
+let justOpened = false;
+
+function openPop(anchor, html) {
+  justOpened = true;
+  popAnchor = anchor;
+  pop.innerHTML = html;
+  pop.hidden = false;
+  const r = anchor.getBoundingClientRect();
+  // Jaga popover tetap di dalam viewport, termasuk saat anchor di tepi kanan.
+  const w = Math.min(pop.offsetWidth, innerWidth - 16);
+  const left = Math.max(8, Math.min(r.left + scrollX, scrollX + innerWidth - w - 8));
+  pop.style.left = `${left}px`;
+  pop.style.top = `${r.bottom + scrollY + 4}px`;
+  pop.querySelector('input,select,button')?.focus();
+}
+
+function closePop() { pop.hidden = true; pop.innerHTML = ''; popAnchor = null; }
+
+document.addEventListener('click', e => {
+  // justOpened menandai klik yang baru saja membuka popover: tanpa ini listener
+  // global menutup kembali popover pada event klik yang sama.
+  if (justOpened) { justOpened = false; return; }
+  if (!pop.hidden && !pop.contains(e.target)) closePop();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !pop.hidden) { closePop(); popAnchor?.focus?.(); }
+});
+
+// --- Filter -------------------------------------------------------------
+const parseF = s => { const [field, op, value] = s.split(':'); return { field, op, value: +value }; };
+const keyOf = s => s.split(':')[0];
+
+function setFilter(field, op, value) {
+  // Satu field satu filter, kecuali rentang yang memang butuh dua batas.
+  view.filters = view.filters.filter(f => keyOf(f) !== field);
+  if (op === 'between') {
+    view.filters.push(`${field}:>=:${value[0]}`, `${field}:<=:${value[1]}`);
+  } else {
+    view.filters.push(`${field}:${op}:${value}`);
+  }
+  browse();
+}
+
+function removeFilter(field) {
+  view.filters = view.filters.filter(f => keyOf(f) !== field);
+  browse();
+}
+
+// Beberapa filter atas field yang sama diringkas jadi satu pill.
+function groupFilters(filters) {
+  const out = new Map();
+  for (const raw of filters) {
+    const f = parseF(raw);
+    if (!out.has(f.field)) out.set(f.field, []);
+    out.get(f.field).push(f);
+  }
+  return out;
+}
+
+const opText = { '>': '>', '>=': '≥', '<': '<', '<=': '≤', '=': '=', '!=': '≠' };
+
+function pillLabel(field, parts) {
+  const label = byField[field]?.label ?? field;
+  if (parts.length === 2) {
+    const lo = parts.find(p => p.op.startsWith('>')), hi = parts.find(p => p.op.startsWith('<'));
+    if (lo && hi) return `${label} <b>${fmtVal(field, lo.value)} - ${fmtVal(field, hi.value)}</b>`;
+  }
+  return parts.map(p => `${label} <b>${opText[p.op]} ${fmtVal(field, p.value)}</b>`).join(', ');
+}
+
+function paintPills() {
+  const active = groupFilters(view.filters);
+  const html = [...active].map(([field, parts]) =>
+    `<span class="pill set" data-pop data-filter="${esc(field)}" role="button" tabindex="0">
+      ${pillLabel(field, parts)}
+      <span class="x" data-del="${esc(field)}" role="button" aria-label="Hapus filter">&times;</span>
+     </span>`).join('');
+
+  crit.innerHTML = html
+    + `<button class="pill add" type="button" data-pop data-addfilter aria-label="Tambah filter">+</button>`
+    + (active.size ? `<button class="pill clear" type="button" data-clear>Reset semua</button>` : '');
+}
+
+crit.addEventListener('click', e => {
+  const del = e.target.closest('[data-del]');
+  if (del) { e.stopPropagation(); return removeFilter(del.dataset.del); }
+  if (e.target.closest('[data-clear]')) { view.filters = []; return browse(); }
+
+  const pill = e.target.closest('[data-filter]');
+  if (pill) return openFilterMenu(pill, pill.dataset.filter);
+
+  const add = e.target.closest('[data-addfilter]');
+  if (add) return openPicker(add, 'filter');
+});
+crit.addEventListener('keydown', e => {
+  const pill = e.target.closest('[data-filter]');
+  if (pill && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault(); openFilterMenu(pill, pill.dataset.filter);
+  }
+});
+
+// Dropdown satu filter: preset ambang siap pakai plus setelan manual.
+function openFilterMenu(anchor, field) {
+  const ind = byField[field];
+  if (!ind) return;
+  const current = groupFilters(view.filters).get(field) ?? [];
+  const cur = current[0];
+
+  const presets = (ind.preset ?? []).map((p, i) => {
+    const isSel = cur && (Array.isArray(p.value)
+      ? current.length === 2 && current.some(c => c.value === p.value[0])
+      : current.length === 1 && cur.op === p.op && cur.value === p.value);
+    return `<button type="button" data-preset="${i}" class="${isSel ? 'sel' : ''}">
+      ${esc(p.label)}${p.hint ? `<small>${esc(p.hint)}</small>` : ''}</button>`;
+  }).join('');
+
+  openPop(anchor, `
+    <h4>${esc(ind.label)}</h4>
+    ${presets}
+    ${presets ? '<hr>' : ''}
+    <div class="row">
+      <select data-op aria-label="Operator">
+        ${['>', '>=', '<', '<=', '=', '!='].map(o =>
+          `<option value="${o}" ${cur?.op === o ? 'selected' : ''}>${opText[o]}</option>`).join('')}
+      </select>
+      <input data-val type="number" step="any" placeholder="nilai"
+        value="${cur ? cur.value : ''}" aria-label="Nilai">
+    </div>
+    <div class="act">
+      ${current.length ? '<button type="button" class="danger" data-remove>Hapus</button>' : ''}
+      <button type="button" class="primary" data-apply>Terapkan</button>
+    </div>`);
+
+  pop.onclick = e => {
+    const p = e.target.closest('[data-preset]');
+    if (p) { const d = ind.preset[+p.dataset.preset]; closePop(); return setFilter(field, d.op, d.value); }
+    if (e.target.closest('[data-remove]')) { closePop(); return removeFilter(field); }
+    if (e.target.closest('[data-apply]')) {
+      const v = Number(pop.querySelector('[data-val]').value);
+      if (!Number.isFinite(v)) return;
+      closePop();
+      return setFilter(field, pop.querySelector('[data-op]').value, v);
+    }
+  };
+}
+
+// --- Picker indikator (untuk filter baru dan kolom baru) ----------------
+function openPicker(anchor, kind) {
+  const used = kind === 'filter'
+    ? new Set(view.filters.map(keyOf))
+    : new Set(shownColumns);
+
+  const render = (term = '') => {
+    const t = term.trim().toLowerCase();
+    const hit = META.indicators.filter(i =>
+      !used.has(i.field) &&
+      (!t || i.label.toLowerCase().includes(t) || i.desc.toLowerCase().includes(t)
+        || i.field.toLowerCase().includes(t)));
+
+    const groups = Object.entries(META.groups).map(([g, label]) => {
+      const items = hit.filter(i => i.group === g);
+      if (!items.length) return '';
+      return `<h4>${esc(label)}</h4>` + items.map(i => {
+        // Indikator yang tak punya data di pasar aktif tetap ditampilkan, tapi
+        // diberi keterangan, supaya user tahu ada dan tahu syaratnya.
+        const off = i.where && !i.where.some(m => view.markets.includes(m));
+        return `<button type="button" data-pick="${esc(i.field)}">
+          ${esc(i.label)}<small>${esc(i.desc)}${off ? ` (hanya ${i.where.join('/')})` : ''}</small>
+        </button>`;
+      }).join('');
+    }).join('');
+
+    return `<input type="search" data-search placeholder="Cari indikator..." value="${esc(term)}">`
+      + (groups || `<h4>Tidak ada yang cocok</h4>`);
+  };
+
+  openPop(anchor, render());
+
+  pop.oninput = e => {
+    if (!e.target.matches('[data-search]')) return;
+    const term = e.target.value;
+    const at = e.target.selectionStart;
+    pop.innerHTML = render(term);
+    const s = pop.querySelector('[data-search]');
+    s.focus(); s.setSelectionRange(at, at);
+  };
+
+  pop.onclick = e => {
+    const b = e.target.closest('[data-pick]');
+    if (!b) return;
+    const field = b.dataset.pick;
+    closePop();
+    if (kind === 'filter') {
+      // Buka dropdown field itu supaya user langsung memilih ambangnya, alih-alih
+      // menambahkan filter kosong yang belum menyaring apa pun.
+      return openFilterMenu(crit.querySelector('[data-addfilter]'), field);
+    }
+    addColumn(field);
+  };
+}
+
+// --- Kolom --------------------------------------------------------------
+let shownColumns = [];
+
+function addColumn(field) {
+  view.hide = view.hide.filter(h => h !== field);
+  if (!view.cols.includes(field)) view.cols.push(field);
+  browse();
+}
+
+function removeColumn(field) {
+  view.cols = view.cols.filter(c => c !== field);
+  // Kolom bawaan preset tidak bisa dibuang dari daftar cols, jadi ditandai hide.
+  if (!view.hide.includes(field)) view.hide.push(field);
+  browse();
+}
+
+// Column settings: ganti timeframe kolom, atau hapus kolomnya.
+function openColumnMenu(anchor, field) {
+  const ind = byField[field];
+  if (!ind) return;
+
+  // Kolom performa punya saudara di timeframe lain; menggantinya berarti menukar
+  // field, persis seperti "Column settings" di TradingView.
+  const tfs = ind.tf ? META.timeframes : [];
+  const options = tfs.map(t =>
+    `<option value="${t.field}" ${t.field === field ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
+
+  openPop(anchor, `
+    <h4>${esc(ind.label)}</h4>
+    ${tfs.length ? `
+      <div class="row"><select data-tf aria-label="Timeframe">${options}</select></div>
+      <div class="act"><button type="button" class="primary" data-applytf>Terapkan</button></div>
+      <hr>` : ''}
+    <button type="button" data-sort="desc">Urutkan menurun</button>
+    <button type="button" data-sort="asc">Urutkan menaik</button>
+    <hr>
+    <button type="button" data-addcol>Tambah kolom...</button>
+    <button type="button" data-rmcol>Hapus kolom ini</button>
+    ${tfs.length ? `<small style="display:block;padding:0 8px 6px;color:var(--fg-dim)">
+      Intraday (${META.intraday.join(', ')}) tidak tersedia: butuh data per jam.</small>` : ''}`);
+
+  pop.onclick = e => {
+    if (e.target.closest('[data-applytf]')) {
+      const next = pop.querySelector('[data-tf]').value;
+      closePop();
+      if (next === field) return;
+      // Tukar kolom lama dengan varian timeframe yang dipilih.
+      if (view.cols.includes(field)) view.cols = view.cols.map(c => c === field ? next : c);
+      else { if (!view.hide.includes(field)) view.hide.push(field); view.cols.push(next); }
+      view.hide = view.hide.filter(h => h !== next);
+      if (view.sort === field) view.sort = next;
+      return browse();
+    }
+    const s = e.target.closest('[data-sort]');
+    if (s) { closePop(); view.sort = field; view.dir = s.dataset.sort; return browse(); }
+    if (e.target.closest('[data-addcol]')) { closePop(); return openPicker(anchor, 'column'); }
+    if (e.target.closest('[data-rmcol]')) { closePop(); return removeColumn(field); }
+  };
+}
+
+// --- Toolbar ------------------------------------------------------------
+function paintToolbar() {
+  $('#markets').innerHTML = MARKETS.map(m =>
+    `<button type="button" data-m="${m.id}" aria-pressed="${view.markets.includes(m.id)}"
+      >${m.label}</button>`).join('');
+  // Saat hasil datang dari prompt, tak ada preset yang aktif: kolomnya ditentukan
+  // prompt, bukan tab. Menyorot tab lama akan menyesatkan.
+  $('#presets').innerHTML = META.presets.map(p =>
+    `<button type="button" role="tab" data-p="${p.id}"
+      aria-selected="${mode === 'browse' && view.preset === p.id}">${esc(p.label)}</button>`).join('');
+}
+
+// Pasar bisa dipilih lebih dari satu, tapi minimal satu harus tetap aktif.
+$('#markets').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const id = b.dataset.m;
+  const next = view.markets.includes(id)
+    ? view.markets.filter(m => m !== id)
+    : [...view.markets, id];
+  if (!next.length) return;
+  view.markets = next;
+  view.sort = null; // kolom sort lama bisa jadi tak ada di pasar baru
+  browse();
+});
+
+$('#presets').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (mode === 'browse' && view.preset === b.dataset.p) return;
+  view.preset = b.dataset.p;
+  // Tiap preset punya kolom dan urutan sendiri; sisa kustomisasi tab lama dibuang.
+  view.sort = null; view.cols = []; view.hide = [];
+  browse();
+});
+
+// Klik header untuk sort, klik ikon untuk column settings.
+$('#th').addEventListener('click', e => {
+  const th = e.target.closest('th.sortable');
+  if (!th) return;
+  const f = th.dataset.f;
+  if (mode === 'prompt') { mode = 'browse'; q.value = ''; }
+
+  if (e.target.closest('[data-cog]')) return openColumnMenu(th, f);
+
+  view.dir = (view.sort === f && view.dir === 'desc') ? 'asc' : 'desc';
+  view.sort = f;
+  browse();
+});
+
+// --- Render -------------------------------------------------------------
+function cell(row, col) {
+  const v = row[col.field];
+  if (typeof v !== 'number' || !Number.isFinite(v)) return '<td class="nil">-</td>';
+
+  switch (col.fmt) {
+    case 'pct':
+      return `<td class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v > 0 ? '+' : ''}${v.toFixed(2)}%</td>`;
+    case 'price':
+      return `<td>${fmtNum(v, row.currency)}</td>`;
+    case 'compact':
+      return `<td>${compact(v)}</td>`;
+    case 'ratio':
+      return `<td>${v.toFixed(2).replace('.', ',')}</td>`;
+    case 'num': {
+      // RSI diberi warna sesuai ambang oversold/overbought, seperti di TradingView.
+      const cls = col.field === 'rsi' ? (v < 30 ? 'up' : v > 70 ? 'down' : '') : '';
+      return `<td class="${cls}">${v.toFixed(col.field === 'rsi' ? 0 : 2)}</td>`;
+    }
+    default:
+      return `<td>${esc(v)}</td>`;
+  }
+}
+
+let colCount = 6;
+
+function skeleton() {
+  tb.innerHTML = Array.from({ length: 8 }, () =>
+    `<tr>${`<td><div class="skel"></div></td>`.repeat(colCount)}</tr>`).join('');
+}
+
+const ICON_INFO = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2"
+  stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/>
+  <path d="M12 11v5"/><path d="M12 8h.01"/></svg>`;
+
+function notice(title, body) {
+  return `<div class="note" role="status">${ICON_INFO}
+    <div><b>${esc(title)}</b><p>${body}</p></div></div>`;
+}
+
+function renderNotices(query) {
+  const out = [];
+
+  // 1. Indikator yang memang tidak ada datanya di aplikasi ini sama sekali.
+  if (query.unsupported?.length) {
+    out.push(notice(
+      `Indikator belum tersedia: ${query.unsupported.map(esc).join(', ')}`,
+      `Indikator itu butuh sumber data yang belum terpasang, jadi kriteria tersebut
+       dilewati. Kriteria lain di prompt Anda tetap dijalankan. Klik tombol
+       <code>+</code> di baris filter untuk melihat semua indikator yang ada.`));
+  }
+
+  // 2. Penerjemah aturan lokal tidak memahami sebagian prompt. Dilaporkan
+  //    apa adanya supaya user tahu kriteria mana yang TIDAK ikut menyaring.
+  if (query.unparsed?.length) {
+    out.push(notice(
+      `Bagian ini belum dipahami: ${query.unparsed.map(u => `"${esc(u)}"`).join(', ')}`,
+      `Kriteria itu tidak ikut menyaring. Penerjemah lokal mengenali nama indikator
+       plus angka, misalnya <code>PER di bawah 15</code>, <code>naik 20% minggu ini</code>,
+       <code>oversold</code>, atau <code>di atas MA200</code>. Klik <code>+</code> untuk
+       melihat semua indikator yang bisa disebut.`));
+  }
+
+  // 3. LLM gagal, hasil datang dari penerjemah lokal.
+  if (query.fallback) {
+    out.push(notice(
+      'LLM tidak bisa dihubungi, prompt diterjemahkan aturan lokal',
+      `Hasil tetap mengikuti kriteria yang dikenali. Penyebab: <code>${esc(query.fallback)}</code>.`));
+  }
+
+  // 4. Indikator ada, tapi bukan untuk pasar yang diminta.
+  for (const m of query.mismatched ?? []) {
+    out.push(notice(
+      `${esc(m.label)} tidak ada untuk ${esc(m.asked.join(', '))}`,
+      `Indikator ini hanya punya data di ${esc(m.only.join(' dan '))}, jadi filternya
+       dilewati. Pilih pasar itu di baris atas kalau memang ingin memakainya.`));
+  }
+
+  $('#notices').innerHTML = out.join('');
+}
+
+const ICON_COG = `<svg class="cog" viewBox="0 0 24 24" fill="none" stroke-width="2"
+  stroke-linecap="round" aria-hidden="true" data-cog><path d="M6 9l6 6 6-6"/></svg>`;
+
+function render(data) {
+  const { query, columns, rows, scanned } = data;
+  colCount = columns.length + 2;
+  shownColumns = columns.map(c => c.field);
+
+  renderNotices(query);
+
+  // Toolbar mengikuti apa yang benar-benar dipakai server, termasuk saat prompt
+  // memilih pasar sendiri atau sort jatuh ke fallback.
+  view.markets = query.markets;
+  view.sort = query.sort.field;
+  view.dir = query.sort.dir;
+  if (query.preset) view.preset = query.preset;
+  paintToolbar();
+  paintPills();
+
+  const filtered = new Set((query.filters ?? []).map(f => f.field));
+
+  const sortLabel = columns.find(c => c.field === query.sort.field)?.label ?? query.sort.field;
+  const eng = query.engine === 'rules' ? ' · aturan lokal' : query.engine === 'llm' ? ' · LLM' : '';
+  status.innerHTML = query.explain
+    ? `${esc(query.explain)} <b>${rows.length}</b> dari ${scanned}.${eng}`
+    : `<b>${rows.length}</b> dari ${scanned} instrumen, urut ${esc(sortLabel)}
+       ${query.sort.dir === 'asc' ? 'menaik' : 'menurun'}.`;
+
+  // Header dibangun dari kolom yang dikirim server, jadi mengikuti prompt dan tab.
+  // Tiap kolom bisa diklik untuk sort, ikon panah membuka column settings.
+  $('#th').innerHTML = `<th scope="col">Simbol</th><th scope="col">Nama</th>`
+    + columns.map(c => {
+      const active = c.field === query.sort.field;
+      const cls = ['sortable', filtered.has(c.field) ? 'on' : ''].filter(Boolean).join(' ');
+      const arrow = active
+        ? `<span class="dir">${query.sort.dir === 'asc' ? '↑' : '↓'}</span>` : '';
+      const aria = active
+        ? ` aria-sort="${query.sort.dir === 'asc' ? 'ascending' : 'descending'}"` : '';
+      return `<th scope="col" class="${cls}" data-f="${esc(c.field)}"${aria}
+        title="${esc(c.desc)}">${esc(c.label)}${arrow}${ICON_COG}</th>`;
+    }).join('')
+    + `<th class="addcol"><button type="button" data-pop data-addcolhead
+        aria-label="Tambah kolom">+</button></th>`;
+
+  $('#th').querySelector('[data-addcolhead]')?.addEventListener('click', e => {
+    e.stopPropagation();
+    openPicker(e.currentTarget, 'column');
+  });
+
+  if (!rows.length) {
+    tb.innerHTML = `<tr><td colspan="${colCount + 1}"><div class="empty">
+      <p>Tidak ada yang cocok dengan kriteria ini.</p>
+      <p>Coba longgarkan angkanya, atau ganti pasar.</p></div></td></tr>`;
+    return;
+  }
+
+  tb.innerHTML = rows.map(r => `<tr>
+    <td><span class="sym">${esc(r.symbol)}</span> <span class="tag">${esc(r.market)}</span></td>
+    <td class="nm" title="${esc(r.name)}">${esc(r.name)}</td>
+    ${columns.map(c => cell(r, c)).join('')}
+    <td></td>
+  </tr>`).join('');
+}
+
+// --- Muat data ----------------------------------------------------------
+// Satu jalur untuk browse dan prompt: keduanya mengambil bentuk respons yang sama.
+let inflight = 0;
+async function load(req, pending) {
+  const ticket = ++inflight;
+  go.disabled = true;
+  status.textContent = pending;
+  skeleton();
+
+  try {
+    const res = await fetch(...req);
+    const data = await res.json();
+    // Klik cepat pada tab bisa membuat respons datang tak berurutan; yang lama dibuang.
+    if (ticket !== inflight) return;
+    if (!res.ok) throw new Error(data.error || `Gagal (${res.status})`);
+    render(data);
+  } catch (err) {
+    if (ticket !== inflight) return;
+    status.innerHTML = `<span class="err">${esc(err.message)}</span>`;
+    tb.innerHTML = `<tr><td colspan="${colCount + 1}"><div class="empty">
+      <p>Data gagal dimuat.</p><p>Periksa koneksi lalu coba lagi.</p></div></td></tr>`;
+  } finally {
+    if (ticket === inflight) go.disabled = false;
+  }
+}
+
+function browse() {
+  mode = 'browse';
+  $('#notices').innerHTML = '';
+  closePop();
+
+  const p = new URLSearchParams({ markets: view.markets.join(','), preset: view.preset });
+  if (view.sort) { p.set('sort', view.sort); p.set('dir', view.dir); }
+  if (view.cols.length) p.set('cols', view.cols.join(','));
+  if (view.hide.length) p.set('hide', view.hide.join(','));
+  for (const f of view.filters) p.append('f', f);
+
+  history.replaceState(null, '', `?${p}`);
+  // Fundamental butuh satu request per simbol, jadi bisa terasa lebih lambat.
+  return load([`/api/browse?${p}`], 'Menarik data pasar...');
+}
+
+$('#f').addEventListener('submit', e => {
+  e.preventDefault();
+  const prompt = q.value.trim();
+  if (!prompt) return browse();
+
+  mode = 'prompt';
+  $('#notices').innerHTML = '';
+  return load([
+    '/api/screen',
+    { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, engine: $('#engineLocal').checked ? 'rules' : 'auto' }) },
+  ], 'Menerjemahkan kriteria dan menarik data pasar...');
+});
+
+// Katalog indikator harus ada sebelum pill dan menu bisa digambar.
+(async () => {
+  try {
+    META = await (await fetch('/api/meta')).json();
+    $('#engineWrap').hidden = !META.llm;
+    for (const i of META.indicators) byField[i.field] = i;
+  } catch {
+    status.innerHTML = '<span class="err">Gagal memuat katalog indikator.</span>';
+    return;
+  }
+  browse();
+})();
+</script>
+</body>
+</html>
