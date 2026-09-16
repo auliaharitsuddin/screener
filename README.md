@@ -2,6 +2,8 @@
 
 A natural-language stock and crypto screener. Type your criteria as a plain sentence, an LLM (or a local rule-based parser) turns it into a structured filter, and the filter runs against public market data.
 
+**[Live demo](https://auliaharitsuddin.github.io/screener/)** — the real UI and the real rule-based parser, but the market data is a one-time snapshot taken at build time (not live), and the LLM path is off; GitHub Pages can't run `server.js` or fetch Yahoo Finance/Gemini. Run it locally (below) for live data.
+
 ## Run it
 
 ```bash
@@ -124,6 +126,8 @@ This is a research tool, not investment advice.
 ## Bahasa Indonesia
 
 Screener saham dan kripto berbasis prompt bahasa natural. Ketik kriteria dengan kalimat biasa, LLM (atau penerjemah aturan lokal) menerjemahkannya jadi filter terstruktur, lalu dijalankan atas data pasar publik.
+
+**[Demo live](https://auliaharitsuddin.github.io/screener/)** — UI dan penerjemah aturan lokal yang sama seperti aslinya, tapi data pasarnya snapshot sekali waktu build (bukan live), dan jalur LLM dimatikan; GitHub Pages tidak bisa menjalankan `server.js` atau memanggil Yahoo Finance/Gemini. Jalankan lokal (di bawah) untuk data live.
 
 ## Jalankan
 
