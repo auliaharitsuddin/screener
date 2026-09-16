@@ -218,6 +218,17 @@ tbody tr:hover{background:var(--surface)}
 .empty p{margin:0 0 var(--s2)}
 footer{margin-top:var(--s5); color:#64748B; font-size:11px}
 
+.langtoggle{
+  margin-left:auto; display:inline-flex; border:1px solid var(--border);
+  border-radius:var(--r); overflow:hidden;
+}
+.langtoggle button{
+  min-height:28px; padding:0 10px; align-self:auto;
+  background:transparent; color:var(--fg-dim); border:0;
+  font:inherit; font-size:11px; font-weight:500; cursor:pointer;
+}
+.langtoggle button[aria-pressed=true]{background:var(--primary); color:var(--on-primary)}
+
 @media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
 @media (max-width:640px){.nm{display:none} .wrap{padding:var(--s4) var(--s3)}}
 </style>
@@ -226,12 +237,16 @@ footer{margin-top:var(--s5); color:#64748B; font-size:11px}
 <div class="wrap">
   <header>
     <h1>Screener</h1>
-    <p>Saring saham IDX, saham US, dan kripto dengan kalimat biasa.</p>
+    <p id="subtitle">Saring saham IDX, saham US, dan kripto dengan kalimat biasa.</p>
+    <div class="langtoggle" id="langtoggle" role="group" aria-label="Bahasa">
+      <button type="button" data-lang="id" aria-pressed="true">ID</button>
+      <button type="button" data-lang="en" aria-pressed="false">EN</button>
+    </div>
   </header>
 
   <form id="f">
     <div class="field">
-      <label for="q">Kriteria</label>
+      <label for="q" id="qLabel">Kriteria</label>
       <input id="q" type="text" autocomplete="off"
         placeholder="mis. saham indonesia yang oversold dan turun jauh dari puncaknya">
     </div>
@@ -239,7 +254,7 @@ footer{margin-top:var(--s5); color:#64748B; font-size:11px}
   </form>
   <label class="engine" id="engineWrap" hidden>
     <input type="checkbox" id="engineLocal">
-    Terjemahkan tanpa LLM (aturan lokal)
+    <span id="engineLabel">Terjemahkan tanpa LLM (aturan lokal)</span>
   </label>
 
   <div class="chips" id="chips"></div>
@@ -262,7 +277,7 @@ footer{margin-top:var(--s5); color:#64748B; font-size:11px}
 
   <div id="pop" class="pop" hidden></div>
 
-  <footer>Data: CoinGecko dan Yahoo Finance, cache 5 menit. Bukan saran investasi.</footer>
+  <footer id="footerText">Data: CoinGecko dan Yahoo Finance, cache 5 menit. Bukan saran investasi.</footer>
 </div>
 
 <script type="module">
@@ -270,11 +285,129 @@ const $ = s => document.querySelector(s);
 const tb = $('#tb'), status = $('#status'), crit = $('#crit'), go = $('#go'), q = $('#q');
 const pop = $('#pop');
 
+// --- Bahasa UI: hanya teks tampilan yang diterjemahkan, input tetap boleh
+// diketik ID atau EN (parser dan LLM sudah mengenali keduanya).
+const I18N = {
+  id: {
+    subtitle: 'Saring saham IDX, saham US, dan kripto dengan kalimat biasa.',
+    qLabel: 'Kriteria',
+    qPlaceholder: 'mis. saham indonesia yang oversold dan turun jauh dari puncaknya',
+    go: 'Cari',
+    engineLabel: 'Terjemahkan tanpa LLM (aturan lokal)',
+    footer: 'Data: CoinGecko dan Yahoo Finance, cache 5 menit. Bukan saran investasi.',
+    marketUS: 'Saham US', marketIDX: 'Saham ID', marketCRYPTO: 'Kripto',
+    symbol: 'Simbol', name: 'Nama', addCol: 'Tambah kolom',
+    resetAll: 'Reset semua', addFilter: 'Tambah filter', removeFilter: 'Hapus filter',
+    value: 'nilai', delete: 'Hapus', apply: 'Terapkan',
+    searchIndicator: 'Cari indikator...', noMatch: 'Tidak ada yang cocok',
+    sortDesc: 'Urutkan menurun', sortAsc: 'Urutkan menaik',
+    addColumnDots: 'Tambah kolom...', removeThisColumn: 'Hapus kolom ini',
+    intradayNote: n => `Intraday (${n}) tidak tersedia: butuh data per jam.`,
+    fetchingMarket: 'Menarik data pasar...',
+    translatingAndFetching: 'Menerjemahkan kriteria dan menarik data pasar...',
+    statusExplain: (rows, scanned, eng) => `<b>${rows}</b> dari ${scanned}.${eng}`,
+    statusDefault: (rows, scanned, label, dir) =>
+      `<b>${rows}</b> dari ${scanned} instrumen, urut ${esc(label)} ${dir === 'asc' ? 'menaik' : 'menurun'}.`,
+    engineLocal: ' · aturan lokal', engineLLM: ' · LLM',
+    emptyTitle: 'Tidak ada yang cocok dengan kriteria ini.',
+    emptyHint: 'Coba longgarkan angkanya, atau ganti pasar.',
+    loadFailTitle: 'Data gagal dimuat.', loadFailHint: 'Periksa koneksi lalu coba lagi.',
+    catalogFail: 'Gagal memuat katalog indikator.',
+    selectMarket: 'Pilih pasar', indicatorSet: 'Set indikator',
+    unsupportedTitle: u => `Indikator belum tersedia: ${u}`,
+    unsupportedBody: `Indikator itu butuh sumber data yang belum terpasang, jadi kriteria tersebut
+       dilewati. Kriteria lain di prompt Anda tetap dijalankan. Klik tombol
+       <code>+</code> di baris filter untuk melihat semua indikator yang ada.`,
+    unparsedTitle: u => `Bagian ini belum dipahami: ${u}`,
+    unparsedBody: `Kriteria itu tidak ikut menyaring. Penerjemah lokal mengenali nama indikator
+       plus angka, misalnya <code>PER di bawah 15</code>, <code>naik 20% minggu ini</code>,
+       <code>oversold</code>, atau <code>di atas MA200</code>. Klik <code>+</code> untuk
+       melihat semua indikator yang bisa disebut.`,
+    fallbackTitle: 'LLM tidak bisa dihubungi, prompt diterjemahkan aturan lokal',
+    fallbackBody: reason => `Hasil tetap mengikuti kriteria yang dikenali. Penyebab: <code>${esc(reason)}</code>.`,
+    mismatchedTitle: (label, asked) => `${esc(label)} tidak ada untuk ${esc(asked)}`,
+    mismatchedBody: only => `Indikator ini hanya punya data di ${esc(only)}, jadi filternya
+       dilewati. Pilih pasar itu di baris atas kalau memang ingin memakainya.`,
+  },
+  en: {
+    subtitle: 'Screen IDX stocks, US stocks, and crypto with plain sentences.',
+    qLabel: 'Criteria',
+    qPlaceholder: 'e.g. Indonesian stocks that are oversold and far off their peak',
+    go: 'Search',
+    engineLabel: 'Translate without LLM (local rules)',
+    footer: 'Data: CoinGecko and Yahoo Finance, 5-minute cache. Not investment advice.',
+    marketUS: 'US Stocks', marketIDX: 'ID Stocks', marketCRYPTO: 'Crypto',
+    symbol: 'Symbol', name: 'Name', addCol: 'Add column',
+    resetAll: 'Reset all', addFilter: 'Add filter', removeFilter: 'Remove filter',
+    value: 'value', delete: 'Delete', apply: 'Apply',
+    searchIndicator: 'Search indicator...', noMatch: 'No matches',
+    sortDesc: 'Sort descending', sortAsc: 'Sort ascending',
+    addColumnDots: 'Add column...', removeThisColumn: 'Remove this column',
+    intradayNote: n => `Intraday (${n}) not available: needs hourly data.`,
+    fetchingMarket: 'Fetching market data...',
+    translatingAndFetching: 'Translating criteria and fetching market data...',
+    statusExplain: (rows, scanned, eng) => `<b>${rows}</b> of ${scanned}.${eng}`,
+    statusDefault: (rows, scanned, label, dir) =>
+      `<b>${rows}</b> of ${scanned} instruments, sorted by ${esc(label)} ${dir === 'asc' ? 'ascending' : 'descending'}.`,
+    engineLocal: ' · local rules', engineLLM: ' · LLM',
+    emptyTitle: 'Nothing matches this criteria.',
+    emptyHint: 'Try loosening the numbers, or switch market.',
+    loadFailTitle: 'Failed to load data.', loadFailHint: 'Check your connection and try again.',
+    catalogFail: 'Failed to load indicator catalog.',
+    selectMarket: 'Select market', indicatorSet: 'Indicator set',
+    unsupportedTitle: u => `Not yet available: ${u}`,
+    unsupportedBody: `That indicator needs a data source that isn't wired up yet, so this
+       criterion was skipped. The rest of your prompt still ran. Click the
+       <code>+</code> button on the filter row to see every indicator available.`,
+    unparsedTitle: u => `This part wasn't understood: ${u}`,
+    unparsedBody: `That criterion did not filter anything. The local translator recognizes
+       indicator names plus numbers, e.g. <code>PE below 15</code>, <code>up 20% this week</code>,
+       <code>oversold</code>, or <code>above MA200</code>. Click <code>+</code> to see every
+       indicator you can mention.`,
+    fallbackTitle: 'LLM unreachable, prompt translated with local rules',
+    fallbackBody: reason => `The result still follows the recognized criteria. Reason: <code>${esc(reason)}</code>.`,
+    mismatchedTitle: (label, asked) => `${esc(label)} has no data for ${esc(asked)}`,
+    mismatchedBody: only => `This indicator only has data for ${esc(only)}, so the filter was
+       skipped. Select that market above if you actually want to use it.`,
+  },
+};
+let lang = localStorage.getItem('screenerLang') === 'en' ? 'en' : 'id';
+const t = key => I18N[lang][key];
+
+function applyStaticI18n() {
+  document.documentElement.lang = lang;
+  $('#subtitle').textContent = t('subtitle');
+  $('#qLabel').textContent = t('qLabel');
+  q.placeholder = t('qPlaceholder');
+  go.textContent = t('go');
+  $('#engineLabel').textContent = t('engineLabel');
+  $('#footerText').textContent = t('footer');
+  $('#langtoggle').querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+  $('#markets').setAttribute('aria-label', t('selectMarket'));
+  $('#presets').setAttribute('aria-label', t('indicatorSet'));
+}
+
+$('#langtoggle').addEventListener('click', e => {
+  const b = e.target.closest('button[data-lang]');
+  if (!b || b.dataset.lang === lang) return;
+  lang = b.dataset.lang;
+  localStorage.setItem('screenerLang', lang);
+  applyStaticI18n();
+  MARKETS.forEach(m => m.label = t('market' + m.id));
+  $('#chips').innerHTML = CONTOH().map(c =>
+    `<button class="chip" type="button" data-q="${c}">${c}</button>`).join('');
+  paintToolbar();
+  paintPills();
+  if (mode === 'browse') browse();
+});
+
 const MARKETS = [
-  { id: 'US', label: 'Saham US' },
-  { id: 'IDX', label: 'Saham ID' },
-  { id: 'CRYPTO', label: 'Kripto' },
+  { id: 'US', label: '' },
+  { id: 'IDX', label: '' },
+  { id: 'CRYPTO', label: '' },
 ];
+MARKETS.forEach(m => m.label = t('market' + m.id));
 
 // Katalog indikator dari server. Diisi sekali saat halaman dibuka.
 let META = { indicators: [], groups: {}, timeframes: [], intraday: [], presets: [] };
@@ -296,13 +429,18 @@ const view = {
 if (!view.markets.length) view.markets = ['US'];
 let mode = 'browse'; // 'browse' | 'prompt'
 
-const CONTOH = [
+const CONTOH = () => lang === 'en' ? [
+  'indonesian stocks PE below 15 with ROE above 15',
+  'us stocks dividend above 3% and low debt',
+  'stocks with bullish MACD and above MA200',
+  'crypto top market cap that is up this week',
+] : [
   'saham indonesia PER di bawah 15 dengan ROE di atas 15',
   'saham amerika dividen di atas 3% dan utang rendah',
   'saham yang MACD bullish dan di atas MA200',
   'kripto top market cap yang naik minggu ini',
 ];
-$('#chips').innerHTML = CONTOH.map(c =>
+$('#chips').innerHTML = CONTOH().map(c =>
   `<button class="chip" type="button" data-q="${c}">${c}</button>`).join('');
 $('#chips').addEventListener('click', e => {
   const b = e.target.closest('.chip');
@@ -419,12 +557,12 @@ function paintPills() {
   const html = [...active].map(([field, parts]) =>
     `<span class="pill set" data-pop data-filter="${esc(field)}" role="button" tabindex="0">
       ${pillLabel(field, parts)}
-      <span class="x" data-del="${esc(field)}" role="button" aria-label="Hapus filter">&times;</span>
+      <span class="x" data-del="${esc(field)}" role="button" aria-label="${t('removeFilter')}">&times;</span>
      </span>`).join('');
 
   crit.innerHTML = html
-    + `<button class="pill add" type="button" data-pop data-addfilter aria-label="Tambah filter">+</button>`
-    + (active.size ? `<button class="pill clear" type="button" data-clear>Reset semua</button>` : '');
+    + `<button class="pill add" type="button" data-pop data-addfilter aria-label="${t('addFilter')}">+</button>`
+    + (active.size ? `<button class="pill clear" type="button" data-clear>${t('resetAll')}</button>` : '');
 }
 
 crit.addEventListener('click', e => {
@@ -469,12 +607,12 @@ function openFilterMenu(anchor, field) {
         ${['>', '>=', '<', '<=', '=', '!='].map(o =>
           `<option value="${o}" ${cur?.op === o ? 'selected' : ''}>${opText[o]}</option>`).join('')}
       </select>
-      <input data-val type="number" step="any" placeholder="nilai"
-        value="${cur ? cur.value : ''}" aria-label="Nilai">
+      <input data-val type="number" step="any" placeholder="${t('value')}"
+        value="${cur ? cur.value : ''}" aria-label="${t('value')}">
     </div>
     <div class="act">
-      ${current.length ? '<button type="button" class="danger" data-remove>Hapus</button>' : ''}
-      <button type="button" class="primary" data-apply>Terapkan</button>
+      ${current.length ? `<button type="button" class="danger" data-remove>${t('delete')}</button>` : ''}
+      <button type="button" class="primary" data-apply>${t('apply')}</button>
     </div>`);
 
   pop.onclick = e => {
@@ -497,11 +635,11 @@ function openPicker(anchor, kind) {
     : new Set(shownColumns);
 
   const render = (term = '') => {
-    const t = term.trim().toLowerCase();
+    const needle = term.trim().toLowerCase();
     const hit = META.indicators.filter(i =>
       !used.has(i.field) &&
-      (!t || i.label.toLowerCase().includes(t) || i.desc.toLowerCase().includes(t)
-        || i.field.toLowerCase().includes(t)));
+      (!needle || i.label.toLowerCase().includes(needle) || i.desc.toLowerCase().includes(needle)
+        || i.field.toLowerCase().includes(needle)));
 
     const groups = Object.entries(META.groups).map(([g, label]) => {
       const items = hit.filter(i => i.group === g);
@@ -516,8 +654,8 @@ function openPicker(anchor, kind) {
       }).join('');
     }).join('');
 
-    return `<input type="search" data-search placeholder="Cari indikator..." value="${esc(term)}">`
-      + (groups || `<h4>Tidak ada yang cocok</h4>`);
+    return `<input type="search" data-search placeholder="${t('searchIndicator')}" value="${esc(term)}">`
+      + (groups || `<h4>${t('noMatch')}</h4>`);
   };
 
   openPop(anchor, render());
@@ -578,13 +716,13 @@ function openColumnMenu(anchor, field) {
       <div class="row"><select data-tf aria-label="Timeframe">${options}</select></div>
       <div class="act"><button type="button" class="primary" data-applytf>Terapkan</button></div>
       <hr>` : ''}
-    <button type="button" data-sort="desc">Urutkan menurun</button>
-    <button type="button" data-sort="asc">Urutkan menaik</button>
+    <button type="button" data-sort="desc">${t('sortDesc')}</button>
+    <button type="button" data-sort="asc">${t('sortAsc')}</button>
     <hr>
-    <button type="button" data-addcol>Tambah kolom...</button>
-    <button type="button" data-rmcol>Hapus kolom ini</button>
+    <button type="button" data-addcol>${t('addColumnDots')}</button>
+    <button type="button" data-rmcol>${t('removeThisColumn')}</button>
     ${tfs.length ? `<small style="display:block;padding:0 8px 6px;color:var(--fg-dim)">
-      Intraday (${META.intraday.join(', ')}) tidak tersedia: butuh data per jam.</small>` : ''}`);
+      ${t('intradayNote')(META.intraday.join(', '))}</small>` : ''}`);
 
   pop.onclick = e => {
     if (e.target.closest('[data-applytf]')) {
@@ -700,37 +838,23 @@ function renderNotices(query) {
 
   // 1. Indikator yang memang tidak ada datanya di aplikasi ini sama sekali.
   if (query.unsupported?.length) {
-    out.push(notice(
-      `Indikator belum tersedia: ${query.unsupported.map(esc).join(', ')}`,
-      `Indikator itu butuh sumber data yang belum terpasang, jadi kriteria tersebut
-       dilewati. Kriteria lain di prompt Anda tetap dijalankan. Klik tombol
-       <code>+</code> di baris filter untuk melihat semua indikator yang ada.`));
+    out.push(notice(t('unsupportedTitle')(query.unsupported.map(esc).join(', ')), t('unsupportedBody')));
   }
 
   // 2. Penerjemah aturan lokal tidak memahami sebagian prompt. Dilaporkan
   //    apa adanya supaya user tahu kriteria mana yang TIDAK ikut menyaring.
   if (query.unparsed?.length) {
-    out.push(notice(
-      `Bagian ini belum dipahami: ${query.unparsed.map(u => `"${esc(u)}"`).join(', ')}`,
-      `Kriteria itu tidak ikut menyaring. Penerjemah lokal mengenali nama indikator
-       plus angka, misalnya <code>PER di bawah 15</code>, <code>naik 20% minggu ini</code>,
-       <code>oversold</code>, atau <code>di atas MA200</code>. Klik <code>+</code> untuk
-       melihat semua indikator yang bisa disebut.`));
+    out.push(notice(t('unparsedTitle')(query.unparsed.map(u => `"${esc(u)}"`).join(', ')), t('unparsedBody')));
   }
 
   // 3. LLM gagal, hasil datang dari penerjemah lokal.
   if (query.fallback) {
-    out.push(notice(
-      'LLM tidak bisa dihubungi, prompt diterjemahkan aturan lokal',
-      `Hasil tetap mengikuti kriteria yang dikenali. Penyebab: <code>${esc(query.fallback)}</code>.`));
+    out.push(notice(t('fallbackTitle'), t('fallbackBody')(query.fallback)));
   }
 
   // 4. Indikator ada, tapi bukan untuk pasar yang diminta.
   for (const m of query.mismatched ?? []) {
-    out.push(notice(
-      `${esc(m.label)} tidak ada untuk ${esc(m.asked.join(', '))}`,
-      `Indikator ini hanya punya data di ${esc(m.only.join(' dan '))}, jadi filternya
-       dilewati. Pilih pasar itu di baris atas kalau memang ingin memakainya.`));
+    out.push(notice(t('mismatchedTitle')(m.label, m.asked.join(', ')), t('mismatchedBody')(m.only.join(' dan '))));
   }
 
   $('#notices').innerHTML = out.join('');
@@ -758,15 +882,14 @@ function render(data) {
   const filtered = new Set((query.filters ?? []).map(f => f.field));
 
   const sortLabel = columns.find(c => c.field === query.sort.field)?.label ?? query.sort.field;
-  const eng = query.engine === 'rules' ? ' · aturan lokal' : query.engine === 'llm' ? ' · LLM' : '';
+  const eng = query.engine === 'rules' ? t('engineLocal') : query.engine === 'llm' ? t('engineLLM') : '';
   status.innerHTML = query.explain
-    ? `${esc(query.explain)} <b>${rows.length}</b> dari ${scanned}.${eng}`
-    : `<b>${rows.length}</b> dari ${scanned} instrumen, urut ${esc(sortLabel)}
-       ${query.sort.dir === 'asc' ? 'menaik' : 'menurun'}.`;
+    ? `${esc(query.explain)} ${t('statusExplain')(rows.length, scanned, eng)}`
+    : t('statusDefault')(rows.length, scanned, sortLabel, query.sort.dir);
 
   // Header dibangun dari kolom yang dikirim server, jadi mengikuti prompt dan tab.
   // Tiap kolom bisa diklik untuk sort, ikon panah membuka column settings.
-  $('#th').innerHTML = `<th scope="col">Simbol</th><th scope="col">Nama</th>`
+  $('#th').innerHTML = `<th scope="col">${t('symbol')}</th><th scope="col">${t('name')}</th>`
     + columns.map(c => {
       const active = c.field === query.sort.field;
       const cls = ['sortable', filtered.has(c.field) ? 'on' : ''].filter(Boolean).join(' ');
@@ -778,7 +901,7 @@ function render(data) {
         title="${esc(c.desc)}">${esc(c.label)}${arrow}${ICON_COG}</th>`;
     }).join('')
     + `<th class="addcol"><button type="button" data-pop data-addcolhead
-        aria-label="Tambah kolom">+</button></th>`;
+        aria-label="${t('addCol')}">+</button></th>`;
 
   $('#th').querySelector('[data-addcolhead]')?.addEventListener('click', e => {
     e.stopPropagation();
@@ -787,8 +910,8 @@ function render(data) {
 
   if (!rows.length) {
     tb.innerHTML = `<tr><td colspan="${colCount + 1}"><div class="empty">
-      <p>Tidak ada yang cocok dengan kriteria ini.</p>
-      <p>Coba longgarkan angkanya, atau ganti pasar.</p></div></td></tr>`;
+      <p>${t('emptyTitle')}</p>
+      <p>${t('emptyHint')}</p></div></td></tr>`;
     return;
   }
 
@@ -820,7 +943,7 @@ async function load(req, pending) {
     if (ticket !== inflight) return;
     status.innerHTML = `<span class="err">${esc(err.message)}</span>`;
     tb.innerHTML = `<tr><td colspan="${colCount + 1}"><div class="empty">
-      <p>Data gagal dimuat.</p><p>Periksa koneksi lalu coba lagi.</p></div></td></tr>`;
+      <p>${t('loadFailTitle')}</p><p>${t('loadFailHint')}</p></div></td></tr>`;
   } finally {
     if (ticket === inflight) go.disabled = false;
   }
@@ -839,7 +962,7 @@ function browse() {
 
   history.replaceState(null, '', `?${p}`);
   // Fundamental butuh satu request per simbol, jadi bisa terasa lebih lambat.
-  return load([`/api/browse?${p}`], 'Menarik data pasar...');
+  return load([`/api/browse?${p}`], t('fetchingMarket'));
 }
 
 $('#f').addEventListener('submit', e => {
@@ -853,8 +976,10 @@ $('#f').addEventListener('submit', e => {
     '/api/screen',
     { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, engine: $('#engineLocal').checked ? 'rules' : 'auto' }) },
-  ], 'Menerjemahkan kriteria dan menarik data pasar...');
+  ], t('translatingAndFetching'));
 });
+
+applyStaticI18n();
 
 // Katalog indikator harus ada sebelum pill dan menu bisa digambar.
 (async () => {
@@ -863,7 +988,7 @@ $('#f').addEventListener('submit', e => {
     $('#engineWrap').hidden = !META.llm;
     for (const i of META.indicators) byField[i.field] = i;
   } catch {
-    status.innerHTML = '<span class="err">Gagal memuat katalog indikator.</span>';
+    status.innerHTML = `<span class="err">${t('catalogFail')}</span>`;
     return;
   }
   browse();
